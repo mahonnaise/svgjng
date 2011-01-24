@@ -8,7 +8,9 @@ import java.io.*;
 public class Main {
 
     public static void main(String[] args) throws Exception {
-        if ((args.length != 4 && args.length != 5) || (args.length != 4 && !(args[0].equals("split") || args[0].equals("fill") || args[0].equals("join"))) && (args.length != 5 && args[0].equals("join"))) {
+        if ((args.length < 4 || args.length > 5) ||
+                (args.length != 4 && !(args[0].equals("split") || args[0].equals("fill") || args[0].equals("join"))) &&
+                (args.length != 5 && args[0].equals("join"))) {
             System.out.println("Usage:" +
                     "\njava -jar SVGJNG.jar split <argb image> <rgb file name> <alpha file name>" +
                     "\n\tSplits an RGBA image into one RGB image and one alpha image." +
