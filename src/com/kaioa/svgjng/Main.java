@@ -52,6 +52,7 @@ public class Main {
         }
     }
 
+    // Prints usage and terminates the application.
     private static void printUsageAndDie() {
         System.out.println("Usage:" +
                 "\njava -jar SVGJNG.jar [mode] <parameters>" +
@@ -273,8 +274,8 @@ public class Main {
         ByteArrayOutputStream alphaBaosJpg;
 
         colorBaos = jpgEncode(colorImage, colorQuality);
-        ImageIO.write(alphaImage, "png", alphaBaosPng);
         alphaBaosJpg = jpgEncode(alphaImage, alphaQuality);
+        ImageIO.write(alphaImage, "png", alphaBaosPng);
 
         // identify smaller alpha image
         ByteArrayOutputStream smallerAlphaBaos, biggerAlphaBaos;
@@ -303,6 +304,7 @@ public class Main {
                 base64Header(alphaExt), base64Encode(smallerAlphaBaos.toByteArray()),
                 base64Header(".jpg"), base64Encode(colorBaos.toByteArray()));
 
+        // write svgz
         File svgzFile = new File(outName);
         BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(svgzFile)) {
 
@@ -315,7 +317,7 @@ public class Main {
         out.flush();
         out.close();
 
-        // write stats
+        // output stats
         DecimalFormat byteFormat = new DecimalFormat("###,###");
         System.out.printf("Alpha size: %10s bytes [%s] (%s was %s bytes)\n",
                 byteFormat.format(smallerAlphaBaos.size()), using, notUsing, byteFormat.format(biggerAlphaBaos.size()));
