@@ -4,58 +4,112 @@ import javax.imageio.*;
 import java.awt.image.*;
 import java.awt.*;
 import java.io.*;
+import java.util.*;
+import java.util.zip.*;
+import java.text.*;
 
 public class Main {
 
     public static void main(String[] args) throws Exception {
-        if ((args.length < 4 || args.length > 5) ||
-                (args.length != 4 && !(args[0].equals("split") || args[0].equals("fill") || args[0].equals("join"))) &&
-                (args.length != 5 && args[0].equals("join"))) {
-            System.out.println("Usage:" +
-                    "\njava -jar SVGJNG.jar split <argb image> <rgb file name> <alpha file name>" +
-                    "\n\tSplits an RGBA image into one RGB image and one alpha image." +
-                    "\nOR" +
-                    "\njava -jar SVGJNG.jar fill <rgb image> <alpha image> <filled-rgb file name>" +
-                    "\n\tFills all 8x8 blocks which are fully transparent." +
-                    "\nOR" +
-                    "\njava -jar SVGJNG.jar join <rgb image> <alpha image> [alt alpha image] <svg file name>" +
-                    "\n\tCreates an JNG-like SVG.");
-            System.exit(1);
+        if (args.length < 2 || args.length > 5) {
+            printUsageAndDie();
         }
-        if (args[0].equals("split")) {
-            splitOp(args[1], args[2], args[3]);
-        } else if (args[0].equals("fill")) {
-            fillOp(args[1], args[2], args[3]);
-        } else { // arg[0] does equal "join"
+
+        String op = args[0];
+
+        // split <rgba image> <rgb file name> <alpha file name>
+        if (op.equals("split")) {
+            if (args.length == 4) {
+                splitOp(args[1], args[2], args[3]);
+            } else {
+                printUsageAndDie();
+            }
+        } // join <rgb image> <alpha image> [alt alpha image] <svg file name>
+        else if (op.equals("join")) {
             if (args.length == 4) {
                 joinOp(args[1], args[2], null, args[3]);
-            } else {
+            } else if (args.length == 5) {
                 joinOp(args[1], args[2], args[3], args[4]);
+            } else {
+                printUsageAndDie();
             }
+        } // fill <rgb image> <alpha image> <filled-rgb file name>
+        else if (op.equals("fill")) {
+            if (args.length == 4) {
+                fillOp(args[1], args[2], args[3]);
+            } else {
+                printUsageAndDie();
+            }
+        } // <rgba image> <svgz file name>
+        else if (args.length == 2) {
+            quickOp(args[0], args[1], "80", "60");
+        } else if (args.length == 3) {
+            quickOp(args[0], args[1], args[2], "60");
+        } else if (args.length == 4) {
+            quickOp(args[0], args[1], args[2], args[3]);
+        } else {
+            printUsageAndDie();
         }
+    }
+
+    private static void printUsageAndDie() {
+        System.out.println("Usage:" +
+                "\njava -jar SVGJNG.jar [mode] <parameters>" +
+                "\n" +
+                "\nsplit <rgba image> <rgb file name> <alpha file name>" +
+                "\n\tSplits an RGBA image into one RGB image and one alpha image." +
+                "\n" +
+                "\nfill <rgb image> <alpha image> <filled-rgb file name>" +
+                "\n\tFills all 8x8 blocks which are fully transparent." +
+                "\n" +
+                "\njoin <rgb image> <alpha image> [alt alpha image] <svg file name>" +
+                "\n\tCreates an JNG-like SVG." +
+                "\n" +
+                "\n<rgba image> <svgz file name> [color quality] [alpha quality]" +
+                "\n\tCreates an unoptimized JNG-like SVGZ." +
+                "\n\tDefault color quality is 80 and default alpha quality is 60.");
+        System.exit(1);
     }
 
     // Performs the "split" operation. Turns one RGBA image into one RGB image and one alpha image.
     private static void splitOp(String inName, String outRgbName, String outAlphaName) throws Exception {
         BufferedImage srcImage = (BufferedImage) ImageIO.read(new File(inName));
 
+        BufferedImage colorImage = splitRgb(srcImage);
+        BufferedImage alphaImage = splitAlpha(srcImage);
+
+        ImageIO.write(colorImage, "png", new File(outRgbName));
+        ImageIO.write(alphaImage, "png", new File(outAlphaName));
+    }
+
+    // RGBA -> RGB
+    private static BufferedImage splitRgb(BufferedImage srcImage) {
         int w = srcImage.getWidth();
         int h = srcImage.getHeight();
 
         BufferedImage colorImage = new BufferedImage(w, h, BufferedImage.TYPE_INT_BGR);
-        BufferedImage alphaImage = new BufferedImage(w, h, BufferedImage.TYPE_BYTE_GRAY);
 
+        // XXX: slow and silly
         for (int x = 0; x < w; x++) {
             for (int y = 0; y < h; y++) {
                 colorImage.setRGB(x, y, srcImage.getRGB(x, y));
             }
         }
 
+        return colorImage;
+    }
+
+    // RGBA -> A
+    private static BufferedImage splitAlpha(BufferedImage srcImage) {
+        int w = srcImage.getWidth();
+        int h = srcImage.getHeight();
+
+        BufferedImage alphaImage = new BufferedImage(w, h, BufferedImage.TYPE_BYTE_GRAY);
+
         WritableRaster alphaImageRaster = (WritableRaster) alphaImage.getRaster();
         alphaImageRaster.setDataElements(0, 0, srcImage.getAlphaRaster());
 
-        ImageIO.write(colorImage, "png", new File(outRgbName));
-        ImageIO.write(alphaImage, "png", new File(outAlphaName));
+        return alphaImage;
     }
 
     // Performs the "fill" operation. Fills every completely translucent 8x8 block with black.
@@ -72,6 +126,7 @@ public class Main {
     private static void fillInvisibleBlocks(BufferedImage alphaImage, BufferedImage colorImage) {
         int w = alphaImage.getWidth();
         int h = alphaImage.getHeight();
+        // XXX: slow and silly
         for (int x = 0; x < w; x += 8) {
             for (int y = 0; y < h; y += 8) {
                 if (blockInvisible(alphaImage, x, y)) {
@@ -83,6 +138,7 @@ public class Main {
 
     // Checks if a 8x8 block is completely invisible.
     private static boolean blockInvisible(BufferedImage alphaImage, int ox, int oy) {
+        // XXX: slow and silly
         for (int x = 0; x < 8 && ox + x < alphaImage.getWidth(); x++) {
             for (int y = 0; y < 8 && oy + y < alphaImage.getHeight(); y++) {
                 if ((alphaImage.getRGB(ox + x, oy + y) & 0x00ffffff) != 0) {
@@ -95,6 +151,7 @@ public class Main {
 
     // Fills a 8x8 block with black.
     private static void fillBlock(BufferedImage colorImage, int ox, int oy) {
+        // XXX: slow and silly
         for (int x = 0; x < 8 && ox + x < colorImage.getWidth(); x++) {
             for (int y = 0; y < 8 && oy + y < colorImage.getHeight(); y++) {
                 colorImage.setRGB(ox + x, oy + y, 0x00000000);
@@ -117,19 +174,27 @@ public class Main {
         BufferedImage alphaImage = (BufferedImage) ImageIO.read(alphaFile);
 
         BufferedWriter out = new BufferedWriter(new FileWriter(new File(outSvgName)));
-        out.write("<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"");
-        out.write("" + alphaImage.getWidth());
-        out.write("\" height=\"");
-        out.write("" + alphaImage.getHeight());
-        out.write("\"><defs><mask id=\"m\"><image xlink:href=\"");
-        out.write(base64Header(smallerAlphaName));
-        out.write(base64Data(smallerAlphaName));
-        out.write("\" width=\"100%\" height=\"100%\"/></mask></defs><image xlink:href=\"");
-        out.write(base64Header(inRgbName));
-        out.write(base64Data(inRgbName));
-        out.write("\" mask=\"url(#m)\" width=\"100%\" height=\"100%\"/></svg>");
+        out.write(createSvg(alphaImage.getWidth(), alphaImage.getHeight(),
+                base64Header(smallerAlphaName), base64Data(smallerAlphaName),
+                base64Header(inRgbName), base64Data(inRgbName)));
         out.flush();
         out.close();
+    }
+
+    private static String createSvg(int width, int height, String alphaHeader, char[] alphaData, String colorHeader, char[] colorData) {
+        StringBuilder sb = new StringBuilder(0x10000); // 64k
+        sb.append("<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"");
+        sb.append("" + width);
+        sb.append("\" height=\"");
+        sb.append("" + height);
+        sb.append("\"><defs><mask id=\"m\"><image xlink:href=\"");
+        sb.append(alphaHeader);
+        sb.append(alphaData);
+        sb.append("\" width=\"100%\" height=\"100%\"/></mask></defs><image xlink:href=\"");
+        sb.append(colorHeader);
+        sb.append(colorData);
+        sb.append("\" mask=\"url(#m)\" width=\"100%\" height=\"100%\"/></svg>");
+        return sb.toString();
     }
 
     // Returns the base64 header thingy, which includes the mime type.
@@ -185,6 +250,93 @@ public class Main {
         } else if (size % 3 == 2) {
             out[--a] = '=';
         }
+        return out;
+    }
+
+    // Performs the convenient switch-less quick conversion.
+    private static void quickOp(String inName, String outName, String colorQualityText, String alphaQualityText) throws Exception {
+        // split
+        BufferedImage srcImage = (BufferedImage) ImageIO.read(new File(inName));
+
+        BufferedImage colorImage = splitRgb(srcImage);
+        BufferedImage alphaImage = splitAlpha(srcImage);
+
+        // fill
+        fillInvisibleBlocks(alphaImage, colorImage);
+
+        // encode images
+        int colorQuality = Integer.parseInt(colorQualityText);
+        int alphaQuality = Integer.parseInt(alphaQualityText);
+        ByteArrayOutputStream colorBaos;
+        ByteArrayOutputStream alphaBaosPng = new ByteArrayOutputStream(0x10000); //64k
+        ByteArrayOutputStream alphaBaosJpg;
+
+        colorBaos = jpgEncode(colorImage, colorQuality);
+        ImageIO.write(alphaImage, "png", alphaBaosPng);
+        alphaBaosJpg = jpgEncode(alphaImage, alphaQuality);
+
+        // identify smaller alpha image
+        ByteArrayOutputStream smallerAlphaBaos, biggerAlphaBaos;
+        String alphaExt, using, notUsing;
+
+        if (alphaBaosPng.size() < alphaBaosJpg.size()) {
+            alphaExt = ".png";
+
+            smallerAlphaBaos = alphaBaosPng;
+            biggerAlphaBaos = alphaBaosJpg;
+
+            using = "PNG";
+            notUsing = "JPG";
+        } else {
+            alphaExt = ".jpg";
+
+            smallerAlphaBaos = alphaBaosJpg;
+            biggerAlphaBaos = alphaBaosPng;
+
+            using = "JPG";
+            notUsing = "PNG";
+        }
+
+        // create svg
+        String svg = createSvg(colorImage.getWidth(), colorImage.getHeight(),
+                base64Header(alphaExt), base64Encode(smallerAlphaBaos.toByteArray()),
+                base64Header(".jpg"), base64Encode(colorBaos.toByteArray()));
+
+        File svgzFile =new File(outName);
+        BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(svgzFile)) {
+
+            {
+                def.setLevel(Deflater.BEST_COMPRESSION);
+            }
+        }));
+
+        out.write(svg);
+        out.flush();
+        out.close();
+        
+        // write stats
+        DecimalFormat byteFormat = new DecimalFormat("###,###");
+        System.out.printf("Alpha size: %10s bytes [%s] (%s was %s bytes)\n",
+                byteFormat.format(smallerAlphaBaos.size()), using, notUsing, byteFormat.format(biggerAlphaBaos.size()));
+        System.out.printf("Color size: %10s bytes \n", byteFormat.format(colorBaos.size()));
+        System.out.printf("SVG size  : %10s bytes \n", byteFormat.format(svg.length()));
+        System.out.printf("SVGZ size : %10s bytes \n", byteFormat.format(svgzFile.length()));
+    }
+
+    // Encodes a JPG image with a specific quality (in percent).
+    private static ByteArrayOutputStream jpgEncode(BufferedImage image, int quality) throws Exception {
+        Iterator iter = ImageIO.getImageWritersByFormatName("jpeg");
+        ImageWriter writer = (ImageWriter) iter.next(); // first one will do
+
+        ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(quality / 100f);
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream(0x10000); //64k
+        writer.setOutput(ImageIO.createImageOutputStream(out));
+
+        writer.write(null, new IIOImage(image, null, null), param);
+
         return out;
     }
 }
