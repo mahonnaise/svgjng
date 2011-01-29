@@ -181,6 +181,7 @@ public class Main {
         out.close();
     }
 
+    // Creates an SVG file.
     private static String createSvg(int width, int height, String alphaHeader, char[] alphaData, String colorHeader, char[] colorData) {
         StringBuilder sb = new StringBuilder(0x10000); // 64k
         sb.append("<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"");
@@ -302,7 +303,7 @@ public class Main {
                 base64Header(alphaExt), base64Encode(smallerAlphaBaos.toByteArray()),
                 base64Header(".jpg"), base64Encode(colorBaos.toByteArray()));
 
-        File svgzFile =new File(outName);
+        File svgzFile = new File(outName);
         BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(new FileOutputStream(svgzFile)) {
 
             {
@@ -313,14 +314,14 @@ public class Main {
         out.write(svg);
         out.flush();
         out.close();
-        
+
         // write stats
         DecimalFormat byteFormat = new DecimalFormat("###,###");
         System.out.printf("Alpha size: %10s bytes [%s] (%s was %s bytes)\n",
                 byteFormat.format(smallerAlphaBaos.size()), using, notUsing, byteFormat.format(biggerAlphaBaos.size()));
-        System.out.printf("Color size: %10s bytes \n", byteFormat.format(colorBaos.size()));
-        System.out.printf("SVG size  : %10s bytes \n", byteFormat.format(svg.length()));
-        System.out.printf("SVGZ size : %10s bytes \n", byteFormat.format(svgzFile.length()));
+        System.out.printf("Color size: %10s bytes\n", byteFormat.format(colorBaos.size()));
+        System.out.printf("SVG size  : %10s bytes\n", byteFormat.format(svg.length()));
+        System.out.printf("SVGZ size : %10s bytes\n", byteFormat.format(svgzFile.length()));
     }
 
     // Encodes a JPG image with a specific quality (in percent).
