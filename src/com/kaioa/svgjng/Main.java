@@ -270,41 +270,29 @@ public class Main {
         // encode images
         int colorQuality = Integer.parseInt(colorQualityText);
         int alphaQuality = Integer.parseInt(alphaQualityText);
-        ByteArrayOutputStream colorBaos;
-        ByteArrayOutputStream alphaBaosPng = new ByteArrayOutputStream(0x10000); //64k
-        ByteArrayOutputStream alphaBaosJpg;
 
-        colorBaos = jpgEncode(colorImage, colorQuality);
-        alphaBaosJpg = jpgEncode(alphaImage, alphaQuality);
+        ByteArrayOutputStream colorBaosJpg = jpgEncode(colorImage, colorQuality);
+        ByteArrayOutputStream alphaBaosJpg = jpgEncode(alphaImage, alphaQuality);
+
+        ByteArrayOutputStream colorBaosPng = new ByteArrayOutputStream(0x10000); //64k
+        ByteArrayOutputStream alphaBaosPng = new ByteArrayOutputStream(0x10000); //64k
+
         // the compression level for PNGs is always 9 (maximum) and cannot be changed via ImageWriteParam
+        ImageIO.write(colorImage, "png", colorBaosPng);
         ImageIO.write(alphaImage, "png", alphaBaosPng);
 
+        // identify smaller color image
+        ByteArrayOutputStream smallerColorBaos = smallerBaos(colorBaosPng, colorBaosJpg, "Color");
+        String colorExt = smallerBaosExt(colorBaosPng, colorBaosJpg);
+
         // identify smaller alpha image
-        ByteArrayOutputStream smallerAlphaBaos, biggerAlphaBaos;
-        String alphaExt, using, notUsing;
-
-        if (alphaBaosPng.size() < alphaBaosJpg.size()) {
-            alphaExt = ".png";
-
-            smallerAlphaBaos = alphaBaosPng;
-            biggerAlphaBaos = alphaBaosJpg;
-
-            using = "PNG";
-            notUsing = "JPG";
-        } else {
-            alphaExt = ".jpg";
-
-            smallerAlphaBaos = alphaBaosJpg;
-            biggerAlphaBaos = alphaBaosPng;
-
-            using = "JPG";
-            notUsing = "PNG";
-        }
+        ByteArrayOutputStream smallerAlphaBaos = smallerBaos(alphaBaosPng, alphaBaosJpg, "Alpha");
+        String alphaExt = smallerBaosExt(alphaBaosPng, alphaBaosJpg);
 
         // create svg
         String svg = createSvg(colorImage.getWidth(), colorImage.getHeight(),
                 base64Header(alphaExt), base64Encode(smallerAlphaBaos.toByteArray()),
-                base64Header(".jpg"), base64Encode(colorBaos.toByteArray()));
+                base64Header(colorExt), base64Encode(smallerColorBaos.toByteArray()));
 
         // write svgz
         File svgzFile = new File(outName);
@@ -319,16 +307,47 @@ public class Main {
         out.flush();
         out.close();
 
-        // output stats
+        // output additional stats
         DecimalFormat byteFormat = new DecimalFormat("###,###");
-        System.out.printf("Alpha size: %10s bytes [%s] (%s was %s bytes, %d%% bigger)\n",
-                byteFormat.format(smallerAlphaBaos.size()), using, notUsing, byteFormat.format(biggerAlphaBaos.size()),
-                Math.round((100f * biggerAlphaBaos.size() / smallerAlphaBaos.size()) - 100));
 
-        System.out.printf("Color size: %10s bytes\n", byteFormat.format(colorBaos.size()));
         System.out.printf("SVG size  : %10s bytes\n", byteFormat.format(svg.length()));
         System.out.printf("SVGZ size : %10s bytes (%d%% of source image)\n",
                 byteFormat.format(svgzFile.length()), Math.round(100f * svgzFile.length() / srcFile.length()));
+    }
+
+    // Identifies the smaller ByteArrayOutputStream and print some stats.
+    private static ByteArrayOutputStream smallerBaos(ByteArrayOutputStream pngBaos, ByteArrayOutputStream jpgBaos, String label) {
+        ByteArrayOutputStream smallerBaos, biggerBaos;
+        String usedFormat, discardedFormat;
+
+        if (pngBaos.size() < jpgBaos.size()) {
+            smallerBaos = pngBaos;
+            biggerBaos = jpgBaos;
+
+            usedFormat = "PNG";
+            discardedFormat = "JPG";
+        } else {
+            smallerBaos = jpgBaos;
+            biggerBaos = pngBaos;
+
+            usedFormat = "JPG";
+            discardedFormat = "PNG";
+        }
+        DecimalFormat byteFormat = new DecimalFormat("###,###");
+        System.out.printf("%s size: %10s bytes [%s] (%s was %s bytes, %d%% bigger)\n",
+                label,
+                byteFormat.format(smallerBaos.size()), usedFormat, discardedFormat, byteFormat.format(biggerBaos.size()),
+                Math.round((100f * biggerBaos.size() / smallerBaos.size()) - 100));
+
+        return smallerBaos;
+    }
+
+    // Dummy file extension from the smaller ByteArrayOutputStream.
+    private static String smallerBaosExt(ByteArrayOutputStream pngBaos, ByteArrayOutputStream jpgBaos) {
+        if (pngBaos.size() < jpgBaos.size()) {
+            return ".png";
+        }
+        return ".jpg";
     }
 
     // Encodes a JPG image with a specific quality (in percent).
