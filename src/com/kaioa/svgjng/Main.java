@@ -258,7 +258,8 @@ public class Main {
     // Performs the convenient switch-less quick conversion.
     private static void quickOp(String inName, String outName, String colorQualityText, String alphaQualityText) throws Exception {
         // split
-        BufferedImage srcImage = (BufferedImage) ImageIO.read(new File(inName));
+        File srcFile = new File(inName);
+        BufferedImage srcImage = (BufferedImage) ImageIO.read(srcFile);
 
         BufferedImage colorImage = splitRgb(srcImage);
         BufferedImage alphaImage = splitAlpha(srcImage);
@@ -275,6 +276,7 @@ public class Main {
 
         colorBaos = jpgEncode(colorImage, colorQuality);
         alphaBaosJpg = jpgEncode(alphaImage, alphaQuality);
+        // the compression level for PNGs is always 9 (maximum) and cannot be changed via ImageWriteParam
         ImageIO.write(alphaImage, "png", alphaBaosPng);
 
         // identify smaller alpha image
@@ -319,11 +321,14 @@ public class Main {
 
         // output stats
         DecimalFormat byteFormat = new DecimalFormat("###,###");
-        System.out.printf("Alpha size: %10s bytes [%s] (%s was %s bytes)\n",
-                byteFormat.format(smallerAlphaBaos.size()), using, notUsing, byteFormat.format(biggerAlphaBaos.size()));
+        System.out.printf("Alpha size: %10s bytes [%s] (%s was %s bytes, %d%% bigger)\n",
+                byteFormat.format(smallerAlphaBaos.size()), using, notUsing, byteFormat.format(biggerAlphaBaos.size()),
+                Math.round((100f * biggerAlphaBaos.size() / smallerAlphaBaos.size()) - 100));
+
         System.out.printf("Color size: %10s bytes\n", byteFormat.format(colorBaos.size()));
         System.out.printf("SVG size  : %10s bytes\n", byteFormat.format(svg.length()));
-        System.out.printf("SVGZ size : %10s bytes\n", byteFormat.format(svgzFile.length()));
+        System.out.printf("SVGZ size : %10s bytes (%d%% of source image)\n",
+                byteFormat.format(svgzFile.length()), Math.round(100f * svgzFile.length() / srcFile.length()));
     }
 
     // Encodes a JPG image with a specific quality (in percent).
